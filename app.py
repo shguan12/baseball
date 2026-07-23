@@ -1,9 +1,8 @@
-# Let's inspect how basesim.py works and create a proper app.py script.
-# We will write out an app.py file that uses simulate_batch_careers (or a small wrapper if needed).
-# Wait, looking at basesim.py, simulate_batch_careers() currently prints the audit report to stdout 
-# and doesn't return the results list! Let's check or adapt it so app.py can capture the results.
+# Let's check how the metrics and summary stats are calculated in app.py
+# In app.py, results list has:
+# "batting_average", "ops", etc. Let's make sure we also store career obp and slg in the dictionary so we can compute the maximums easily.
 
-code_app = '''import streamlit as st
+code_app_updated = '''import streamlit as st
 import random
 from basesim import (
     generate_player, 
@@ -81,8 +80,18 @@ def run_streamlit_batch(num_players):
                 profile["age"] += 1
 
         c_ab = max(1, career_stats["at_bats"])
-        career_ops = ((career_stats["hits"] + career_stats["walks"]) / max(1, c_ab + career_stats["walks"])) + \
-                     ((career_stats["singles"] + (2 * career_stats["doubles"]) + (3 * career_stats["triples"]) + (4 * career_stats["home_runs"])) / c_ab)
+        c_bb = career_stats["walks"]
+        c_pa = c_ab + c_bb
+        c_hits = career_stats["hits"]
+        c_singles = career_stats["singles"]
+        c_doubles = career_stats["doubles"]
+        c_triples = career_stats["triples"]
+        c_hr = career_stats["home_runs"]
+
+        career_avg = c_hits / c_ab
+        career_obp = (c_hits + c_bb) / max(1, c_pa)
+        career_slg = (c_singles + (2 * c_doubles) + (3 * c_triples) + (4 * c_hr)) / c_ab
+        career_ops = career_obp + career_slg
 
         results.append({
             "name": name,
@@ -91,9 +100,11 @@ def run_streamlit_batch(num_players):
             "archetype": profile["archetype"]["name"],
             "games": career_stats["games"],
             "at_bats": c_ab,
-            "hits": career_stats["hits"],
-            "home_runs": career_stats["home_runs"],
-            "batting_average": round(career_stats["hits"] / c_ab, 3),
+            "hits": c_hits,
+            "home_runs": c_hr,
+            "batting_average": round(career_avg, 3),
+            "obp": round(career_obp, 3),
+            "slg": round(career_slg, 3),
             "ops": round(career_ops, 3),
             "war": round(career_war, 1),
             "hof_verdict": evaluate_hall_of_fame(career_stats, career_war)
@@ -113,8 +124,12 @@ if st.session_state.simulation_results is not None:
     # Summary Metrics
     max_hr = max(p["home_runs"] for p in results)
     max_war = max(p["war"] for p in results)
+    max_avg = max(p["batting_average"] for p in results)
+    max_obp = max(p["obp"] for p in results)
+    max_slg = max(p["slg"] for p in results)
     avg_league_war = sum(p["war"] for p in results) / len(results)
 
+    # First row of metrics
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Max Home Runs in Batch", max_hr)
@@ -122,6 +137,15 @@ if st.session_state.simulation_results is not None:
         st.metric("Max Career WAR", max_war)
     with col3:
         st.metric("Average Career WAR", round(avg_league_war, 1))
+
+    # Second row of metrics for slash line
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        st.metric("Highest Batting Average", f"{max_avg:.3f}")
+    with col5:
+        st.metric("Highest OBP", f"{max_obp:.3f}")
+    with col6:
+        st.metric("Highest SLG", f"{max_slg:.3f}")
 
     st.markdown("---")
     st.subheader("Simulated Player Dossiers (Chronological Order)")
@@ -137,9 +161,9 @@ if st.session_state.simulation_results is not None:
                 st.metric("Career Hits", player["hits"])
             with c2:
                 st.metric("Career WAR", player["war"])
-                st.metric("Batting Average", player["batting_average"])
+                st.metric("Batting Average", f"{player['batting_average']:.3f}")
             with c3:
-                st.metric("Career OPS", player["ops"])
+                st.metric("Career OPS", f"{player['ops']:.3f}")
                 st.metric("Total Games", player["games"])
             with c4:
                 st.metric("Archetype", player["archetype"])
@@ -149,6 +173,6 @@ else:
 '''
 
 with open("app.py", "w") as f:
-    f.write(code_app)
+    f.write(code_app_updated)
 
-print("app.py successfully created and integrated with basesim.py!")
+print("app.py updated with BA, OBP, and SLG metrics successfully!")
