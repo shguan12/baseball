@@ -15,13 +15,20 @@ power_nerf = st.sidebar.slider("Post-30 Power Aging Multiplier", min_value=0.05,
 # --- Main App Action ---
 if st.button("Run Batch Simulation", type="primary"):
     with st.spinner("Simulating alternate timelines..."):
-        # Call your simulation function here
-        # results_df = run_batch_simulation(num_careers, power_nerf)
+        # Call your simulation function and save it to session state
+        st.session_state.simulation_results = run_batch_simulation(num_careers, power_nerf)
 
-        st.success("Simulation complete!")
-
-        # Display metrics or summary data
-        # st.metric(label="Max Home Runs Recorded", value=results_df['HR'].max())
-
-        # Display the data table / Carfax dossier
-        # st.dataframe(results_df)
+# --- Display Results if they exist in state ---
+if st.session_state.simulation_results is not None:
+    st.success("Simulation complete!")
+    
+    # Example metric (adjust keys to match your dictionary structure)
+    max_hr = max([player['HR'] for player in st.session_state.simulation_results])
+    st.metric(label="Max Home Runs Recorded", value=max_hr)
+    
+    # Render your player dossiers / audit logs
+    for player in st.session_state.simulation_results:
+        with st.expander(f"{player['name']} - {player['archetype']}"):
+            st.markdown(f"**Career HRs:** {player['HR']} | **HoF Status:** {player['hof_status']}")
+            # Or st.code() if you're outputting a raw text "Carfax" dossier string:
+            # st.code(player['dossier_text'])
