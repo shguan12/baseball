@@ -1,80 +1,154 @@
-import streamlit as st
-# Make sure simulation.py is in the same directory and contains run_batch_simulation
-from simulation import run_batch_simulation
+# Let's inspect how basesim.py works and create a proper app.py script.
+# We will write out an app.py file that uses simulate_batch_careers (or a small wrapper if needed).
+# Wait, looking at basesim.py, simulate_batch_careers() currently prints the audit report to stdout 
+# and doesn't return the results list! Let's check or adapt it so app.py can capture the results.
 
-# --- Page Configuration ---
+code_app = '''import streamlit as st
+import random
+from basesim import (
+    generate_player, 
+    simulate_season, 
+    determine_games_played, 
+    calculate_season_war, 
+    evaluate_hall_of_fame,
+    PLAYER_ARCHETYPES,
+    POSITIONS
+)
+
 st.set_page_config(
-    page_title="Baseball Career Simulator", 
-    page_icon="⚾", 
+    page_title="Baseball Career Simulator",
+    page_icon="⚾",
     layout="wide"
 )
+
+st.title("⚾ Procedural Baseball Career Simulator")
+st.markdown("Simulate alternate timelines and inaccurate baseball player careers using your `basesim.py` engine.")
 
 # --- Session State Initialization ---
 if "simulation_results" not in st.session_state:
     st.session_state.simulation_results = None
 
-# --- UI Header ---
-st.title("⚾ Procedural Baseball Career Simulator")
-st.markdown("Simulate alternate timelines and inaccurate baseball player careers.")
-
 # --- Sidebar Controls ---
 st.sidebar.header("Simulation Settings")
-num_careers = st.sidebar.slider("Careers to Simulate", min_value=10, max_value=500, value=100, step=10)
-power_nerf = st.sidebar.slider("Post-30 Power Aging Multiplier", min_value=0.05, max_value=0.25, value=0.14, step=0.01)
+num_players = st.sidebar.slider("Careers to Simulate", min_value=10, max_value=500, value=100, step=10)
 
-# --- Action Trigger ---
-if st.sidebar.button("Run Batch Simulation", type="primary"):
-    # Clear any potential caching issues by forcing a clean execution call
-    with st.spinner("Simulating alternate timelines..."):
-        # Run the simulation function fresh
-        results = run_batch_simulation(num_careers, power_nerf)
-        # Store directly into session state
-        st.session_state.simulation_results = results
+# Custom function to capture results cleanly for Streamlit without forcing print statements
+def run_streamlit_batch(num_players):
+    results = []
+    for _ in range(num_players):
+        profile = generate_player()
+        name = profile["name"]
 
-# --- Main Results Display Area ---
-if st.session_state.simulation_results:
-    st.success("Simulation complete!")
-    
-    results = st.session_state.simulation_results
-    
-    # Top-level summary metric
-    if len(results) > 0 and 'HR' in results[0]:
-        max_hr = max(player['HR'] for player in results)
-        st.metric(label="Max Home Runs Recorded Across Batch", value=max_hr)
-    
-    st.markdown("---")
-    st.subheader("Player Dossiers (Chronological Order)")
+        career_stats = {
+            "games": 0, "at_bats": 0, "hits": 0, "singles": 0, "doubles": 0,
+            "triples": 0, "home_runs": 0, "walks": 0, "strikeouts": 0,
+            "rbi": 0, "runs": 0, "stolen_bases": 0, "caught_stealing": 0
+        }
 
-    # Render players precisely in the order they were simulated (no sorting)
-    for player in results:
-        # Fallback keys safely handled using .get() to prevent KeyErrors
-        name = player.get('name', 'Unknown Player')
-        archetype = player.get('archetype', 'Unknown Archetype')
-        hr = player.get('HR', 0)
-        hof = player.get('hof_status', 'Pending')
-        
-        expander_label = f"{name} — {archetype} | HR: {hr} | HoF: {hof}"
-        
-        with st.expander(expander_label):
-            # If your original script generated a full text dossier string:
-            if 'dossier_text' in player:
-                st.code(player['dossier_text'], language="text")
-            
-            # Otherwise, render individual stats cleanly in columns
+        career_war = 0.0
+        season_count = 0
+        is_active = True
+        last_ops = None
+
+        while is_active and season_count < 25:
+            games = determine_games_played(profile, last_ops)
+            season = simulate_season(games, profile)
+            last_ops = season["ops"]
+            s_war = calculate_season_war(season, profile)
+            career_war += s_war
+
+            for key in career_stats:
+                career_stats[key] += season[key]
+
+            season_count += 1
+
+            if season["ops"] < 0.670:
+                profile["consecutive_bad_years"] += 1
             else:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Career Home Runs", hr)
-                    st.metric("Hits", player.get('H', 0))
-                with col2:
-                    st.metric("Batting Average", player.get('BA', '.000'))
-                    st.metric("WAR", player.get('WAR', 0.0))
-                with col3:
-                    st.metric("Hall of Fame Status", hof)
-                    st.metric("Peak Years", player.get('peak_years', 'N/A'))
-                
-                # Full career text log if available
-                if 'yearly_log' in player:
-                    st.text(player['yearly_log'])
+                profile["consecutive_bad_years"] = 0
+
+            retire_chance = 0.0
+            if profile["tier"] not in ["Star", "Generational Icon"] and profile["age"] >= 32:
+                retire_chance = (profile["age"] - 31) * 0.35
+            elif profile["age"] >= 36:
+                retire_chance = (profile["age"] - 35) * 0.40
+            elif profile["tier"] in ["Fringe Prospect / Utility Glove"] and profile["consecutive_bad_years"] >= 2:
+                is_active = False
+
+            if is_active and random.random() < retire_chance:
+                is_active = False
+            elif is_active:
+                profile["age"] += 1
+
+        c_ab = max(1, career_stats["at_bats"])
+        career_ops = ((career_stats["hits"] + career_stats["walks"]) / max(1, c_ab + career_stats["walks"])) + \
+                     ((career_stats["singles"] + (2 * career_stats["doubles"]) + (3 * career_stats["triples"]) + (4 * career_stats["home_runs"])) / c_ab)
+
+        results.append({
+            "name": name,
+            "position": profile["position"]["name"],
+            "tier": profile["tier"],
+            "archetype": profile["archetype"]["name"],
+            "games": career_stats["games"],
+            "at_bats": c_ab,
+            "hits": career_stats["hits"],
+            "home_runs": career_stats["home_runs"],
+            "batting_average": round(career_stats["hits"] / c_ab, 3),
+            "ops": round(career_ops, 3),
+            "war": round(career_war, 1),
+            "hof_verdict": evaluate_hall_of_fame(career_stats, career_war)
+        })
+    return results
+
+# --- Main Action Trigger ---
+if st.sidebar.button("Run Batch Simulation", type="primary"):
+    with st.spinner(f"Simulating {num_players} baseball careers..."):
+        st.session_state.simulation_results = run_streamlit_batch(num_players)
+
+# --- Display Results ---
+if st.session_state.simulation_results is not None:
+    results = st.session_state.simulation_results
+    st.success(f"Successfully simulated {len(results)} player careers!")
+
+    # Summary Metrics
+    max_hr = max(p["home_runs"] for p in results)
+    max_war = max(p["war"] for p in results)
+    avg_league_war = sum(p["war"] for p in results) / len(results)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Max Home Runs in Batch", max_hr)
+    with col2:
+        st.metric("Max Career WAR", max_war)
+    with col3:
+        st.metric("Average Career WAR", round(avg_league_war, 1))
+
+    st.markdown("---")
+    st.subheader("Simulated Player Dossiers (Chronological Order)")
+    st.caption("Presented in the exact order generated by the simulation engine.")
+
+    # Render each player in the chronological order they were simulated
+    for player in results:
+        title = f"{player['name']} — {player['position']} ({player['tier']})"
+        with st.expander(title):
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.metric("Career HRs", player["home_runs"])
+                st.metric("Career Hits", player["hits"])
+            with c2:
+                st.metric("Career WAR", player["war"])
+                st.metric("Batting Average", player["batting_average"])
+            with c3:
+                st.metric("Career OPS", player["ops"])
+                st.metric("Total Games", player["games"])
+            with c4:
+                st.metric("Archetype", player["archetype"])
+                st.metric("Hall of Fame Status", player["hof_verdict"])
 else:
-    st.info("Adjust your settings in the sidebar and click **Run Batch Simulation** to begin.")
+    st.info("Configure your batch size in the sidebar and click **Run Batch Simulation** to start.")
+'''
+
+with open("app.py", "w") as f:
+    f.write(code_app)
+
+print("app.py successfully created and integrated with basesim.py!")
