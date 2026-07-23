@@ -1,11 +1,16 @@
 import streamlit as st
+
 # Import your simulation functions from simulation.py
-# from simulation import run_batch_simulation
+from simulation import run_batch_simulation
 
 st.set_page_config(page_title="Baseball Career Simulator", layout="wide")
 
 st.title("⚾ Procedural Baseball Career Simulator")
 st.markdown("Simulate (inaccurate) baseball player careers.")
+
+# --- Initialize Session State ---
+if "simulation_results" not in st.session_state:
+    st.session_state.simulation_results = None
 
 # --- Sidebar Controls ---
 st.sidebar.header("Simulation Settings")
@@ -30,5 +35,3 @@ if st.session_state.simulation_results is not None:
     for player in st.session_state.simulation_results:
         with st.expander(f"{player['name']} - {player['archetype']}"):
             st.markdown(f"**Career HRs:** {player['HR']} | **HoF Status:** {player['hof_status']}")
-            # Or st.code() if you're outputting a raw text "Carfax" dossier string:
-            # st.code(player['dossier_text'])
