@@ -25,7 +25,15 @@ PLAYER_ARCHETYPES = [
         "bb_rate": 0.08,
         "so_rate": 0.06,                             # Extremely low strikeouts
         "power_mult": 0.4,
-        "contact_mult": 1.45                         # Massive boost to hit generation
+        "contact_mult": 1.20                         # Reined in to keep peaks around .320-.335
+    },
+    {
+        "name": "Elite MVP Dual-Threat",
+        "hit_weights": [0.52, 0.26, 0.03, 0.19],  # Great mix of doubles, singles, and solid HR power
+        "bb_rate": 0.11,
+        "so_rate": 0.16,                             # Controlled strikeouts
+        "power_mult": 1.2,
+        "contact_mult": 1.10                         # High average (.290-.315) with 30-40 HR power
     },
     {
         "name": "Contact Speedster",
@@ -33,7 +41,7 @@ PLAYER_ARCHETYPES = [
         "bb_rate": 0.08,
         "so_rate": 0.15,
         "power_mult": 0.6,
-        "contact_mult": 1.15
+        "contact_mult": 1.10
     },
     {
         "name": "Gap Power Hitter",
@@ -95,22 +103,19 @@ def simulate_season(games, profile):
     ab = int(games * random.uniform(3.5, 4.1))
     archetype = profile["archetype"]
     
-    # Calculate hits using archetype contact multiplier and talent multiplier
     hit_rate = (0.23 + (profile["talent_multiplier"] * 0.03)) * archetype["contact_mult"]
     hits = int(ab * hit_rate * random.uniform(0.92, 1.08))
-    hits = min(hits, ab) # Cannot have more hits than at-bats
+    hits = min(hits, ab)
     
     walks = int(ab * archetype["bb_rate"] * random.uniform(0.85, 1.15))
     strikeouts = int(ab * archetype["so_rate"] * random.uniform(0.9, 1.1))
     
-    # Distribute hits among singles, doubles, triples, home runs
     hw = archetype["hit_weights"]
     singles = int(hits * hw[0])
     doubles = int(hits * hw[1])
     triples = int(hits * hw[2])
     home_runs = int(hits * hw[3])
     
-    # Adjust to ensure exact hit total alignment
     total_distributed = singles + doubles + triples + home_runs
     if total_distributed < hits:
         singles += (hits - total_distributed)
