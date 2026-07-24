@@ -146,13 +146,19 @@ def simulate_season(games, profile):
         "batting_average": ba,
         "ops": ops
     }
-
+    
 def calculate_season_war(season, profile):
-    offensive_runs = (season["home_runs"] * 1.4) + (season["hits"] * 0.4) + (season["walks"] * 0.3)
+    # Scale offensive contributions to more realistic run values
+    offensive_runs = (season["home_runs"] * 1.8) + (season["hits"] * 0.5) + (season["walks"] * 0.4) + (season["runs"] * 0.2) + (season["rbi"] * 0.2)
     position_bonus = profile["position"]["pos_modifier"]
-    raw_war = (offensive_runs / 10.0) * position_bonus * (profile["talent_multiplier"] * 0.8)
-    return round(max(-0.5, raw_war / 15.0), 1)
-
+    
+    # Standard baseball roughly translates ~10 runs to 1 WAR. 
+    # Let's scale raw WAR per season properly based on talent and performance.
+    raw_war = (offensive_runs / 10.0) * position_bonus * profile["talent_multiplier"]
+    
+    # Ensure a floor for brutal seasons, but let elite years soar to 7-9 WAR
+    return round(max(-1.0, raw_war), 1)
+    
 def evaluate_hall_of_fame(career_stats, career_war):
     if career_war >= 60.0 or career_stats["home_runs"] >= 500:
         return "First Ballot Hall of Famer"
